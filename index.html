@@ -47,64 +47,63 @@ const {
   useState,
   useEffect
 } = React;
-
-// 아이콘 (lucide 대체용 내장 SVG)
 const ChevronRight = ({
   size = 20
-}) => /*#__PURE__*/React.createElement("svg", {
+}) => React.createElement('svg', {
   width: size,
   height: size,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: "2",
-  strokeLinecap: "round",
-  strokeLinejoin: "round"
-}, /*#__PURE__*/React.createElement("polyline", {
-  points: "9 18 15 12 9 6"
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: '2',
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round'
+}, React.createElement('polyline', {
+  points: '9 18 15 12 9 6'
 }));
 const LogOut = ({
   size = 20
-}) => /*#__PURE__*/React.createElement("svg", {
+}) => React.createElement('svg', {
   width: size,
   height: size,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: "2",
-  strokeLinecap: "round",
-  strokeLinejoin: "round"
-}, /*#__PURE__*/React.createElement("path", {
-  d: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
-}), /*#__PURE__*/React.createElement("polyline", {
-  points: "16 17 21 12 16 7"
-}), /*#__PURE__*/React.createElement("line", {
-  x1: "21",
-  y1: "12",
-  x2: "9",
-  y2: "12"
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: '2',
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round'
+}, React.createElement('path', {
+  d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'
+}), React.createElement('polyline', {
+  points: '16 17 21 12 16 7'
+}), React.createElement('line', {
+  x1: '21',
+  y1: '12',
+  x2: '9',
+  y2: '12'
 }));
 const Save = ({
   size = 20
-}) => /*#__PURE__*/React.createElement("svg", {
+}) => React.createElement('svg', {
   width: size,
   height: size,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: "2",
-  strokeLinecap: "round",
-  strokeLinejoin: "round"
-}, /*#__PURE__*/React.createElement("path", {
-  d: "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
-}), /*#__PURE__*/React.createElement("polyline", {
-  points: "17 21 17 13 7 13 7 21"
-}), /*#__PURE__*/React.createElement("polyline", {
-  points: "7 3 7 8 15 8"
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: '2',
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round'
+}, React.createElement('path', {
+  d: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z'
+}), React.createElement('polyline', {
+  points: '17 21 17 13 7 13 7 21'
+}), React.createElement('polyline', {
+  points: '7 3 7 8 15 8'
 }));
 const EvaluationApp = () => {
   // ⬇️⬇️⬇️ 여기에 구글 Apps Script 웹앱 URL을 붙여넣으세요 (배포 후 받는 주소) ⬇️⬇️⬇️
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyvUSzjkSsBn9OoPHcBdjDG_RhaI6dvPmsfk9-6OKplko6h28Hhg-U7-R4Y_DUpJoMV/exec';
+  // 예: const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycb..../exec';
   // 교사 비밀번호: 평문 대신 SHA-256 해시로 보관 (소스에 비번이 노출되지 않음)
   // 비밀번호: vpfmalskchekd*26
   const TEACHER_PW_HASH = 'e240826a3e44ab5a1ab51b645223372bbc43d0caf70f59242c94494566a62e3b';
@@ -345,8 +344,22 @@ const EvaluationApp = () => {
     if (!window.confirm('최종 제출하면 선생님이 제출취소해 주기 전에는 수정할 수 없어요.\n정말 제출할까요?')) return;
     const ok = await sendToSheet(true);
     if (ok) {
-      setStudentLocked(true);
       alert('✅ 최종 제출 완료! 수고했어요 😊');
+      // 보안: 제출 후 화면과 메모리에서 응답 내용 지우기
+      setRolesAnswers({
+        q2: '',
+        q3: '',
+        q4: '',
+        q5: []
+      });
+      setCleaningAnswers({
+        q2: '',
+        q3: '',
+        q4: '',
+        q5: []
+      });
+      setPraiseAnswers({});
+      setCurrentPage('blocked');
     }
   };
 
@@ -433,29 +446,21 @@ const EvaluationApp = () => {
     });
     setPraiseAnswers({});
     setStudentLocked(false);
+    let isSubmitted = false;
+    let draft = null;
 
-    // 기존 제출/임시저장 내용 불러오기
+    // 기존 기록 확인 (최종 제출 여부 먼저 판단)
     if (SCRIPT_URL) {
       setLoggingIn(true);
       try {
         const res = await fetch(SCRIPT_URL + '?action=getOne&no=' + no);
         const json = await res.json();
         if (json.record) {
-          const r = json.record;
-          if (r.roles) setRolesAnswers({
-            q2: r.roles.q2 || '',
-            q3: r.roles.q3 || '',
-            q4: r.roles.q4 || '',
-            q5: r.roles.q5 || []
-          });
-          if (r.cleaning) setCleaningAnswers({
-            q2: r.cleaning.q2 || '',
-            q3: r.cleaning.q3 || '',
-            q4: r.cleaning.q4 || '',
-            q5: r.cleaning.q5 || []
-          });
-          if (r.praise) setPraiseAnswers(r.praise);
-          if (r.submitted) setStudentLocked(true);
+          if (json.record.submitted) {
+            isSubmitted = true; // 최종 제출됨 -> 내용 불러오지 않음
+          } else {
+            draft = json.record; // 임시저장(작성중) -> 이어쓰기 허용
+          }
         }
       } catch (err) {
         // 불러오기 실패 시 빈 폼으로 진행
@@ -464,12 +469,35 @@ const EvaluationApp = () => {
       }
     }
     setCurrentStudent(foundStudent);
-    setActiveTab('roles');
-    setCurrentPage('evaluation');
     setLoginData({
       no: '',
       name: ''
     });
+
+    // 최종 제출된 학생: 응답을 보여주지 않고 차단 화면으로
+    if (isSubmitted) {
+      setCurrentPage('blocked');
+      return;
+    }
+
+    // 임시저장 내용이 있으면 이어서 작성
+    if (draft) {
+      if (draft.roles) setRolesAnswers({
+        q2: draft.roles.q2 || '',
+        q3: draft.roles.q3 || '',
+        q4: draft.roles.q4 || '',
+        q5: draft.roles.q5 || []
+      });
+      if (draft.cleaning) setCleaningAnswers({
+        q2: draft.cleaning.q2 || '',
+        q3: draft.cleaning.q3 || '',
+        q4: draft.cleaning.q4 || '',
+        q5: draft.cleaning.q5 || []
+      });
+      if (draft.praise) setPraiseAnswers(draft.praise);
+    }
+    setActiveTab('roles');
+    setCurrentPage('evaluation');
   };
 
   // 칭찬카드 투표 처리
@@ -610,6 +638,42 @@ const EvaluationApp = () => {
       onClick: tryTeacherLogin,
       className: "bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-bold"
     }, "입장"))))));
+  }
+
+  // 최종 제출됨 -> 응답 비표시 차단 화면
+  if (currentPage === 'blocked') {
+    return /*#__PURE__*/React.createElement("div", {
+      className: "min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "text-5xl mb-4"
+    }, "✅"), /*#__PURE__*/React.createElement("h1", {
+      className: "text-2xl font-bold text-green-700 mb-3"
+    }, "이미 제출되었습니다"), /*#__PURE__*/React.createElement("p", {
+      className: "text-gray-600 leading-relaxed"
+    }, currentStudent ? `${currentStudent.no}. ${currentStudent.name} 학생은 ` : '', "이미 ", /*#__PURE__*/React.createElement("strong", null, "최종 제출"), "을 완료했어요."), /*#__PURE__*/React.createElement("p", {
+      className: "text-sm text-gray-500 mt-3 leading-relaxed"
+    }, "보안을 위해 제출한 내용은 보이지 않습니다.", /*#__PURE__*/React.createElement("br", null), "수정할 것이 있으면 ", /*#__PURE__*/React.createElement("strong", null, "선생님께 제출취소"), "를 요청하세요."), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setCurrentStudent(null);
+        setRolesAnswers({
+          q2: '',
+          q3: '',
+          q4: '',
+          q5: []
+        });
+        setCleaningAnswers({
+          q2: '',
+          q3: '',
+          q4: '',
+          q5: []
+        });
+        setPraiseAnswers({});
+        setCurrentPage('login');
+      },
+      className: "mt-6 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg"
+    }, "처음으로")));
   }
 
   // 교사 대시보드 페이지
@@ -968,7 +1032,7 @@ const EvaluationApp = () => {
   }, "✅ ", submitting ? '제출 중...' : '최종 제출하기')))));
 };
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(/*#__PURE__*/React.createElement(EvaluationApp, null));
+root.render(React.createElement(EvaluationApp));
 } catch (err) {
   var r = document.getElementById('root');
   if (r) r.innerHTML = '<div style="padding:24px;font-family:sans-serif;color:#b00;"><b>앱 실행 오류</b><br><code style="display:block;margin-top:8px;padding:8px;background:#fee;border-radius:6px;">'+(err && err.message ? err.message : err)+'</code></div>';
