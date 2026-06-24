@@ -301,6 +301,8 @@ const EvaluationApp = () => {
   const [loadingData, setLoadingData] = useState(false);
   const [selectedStudentNo, setSelectedStudentNo] = useState(null);
   const [studentLocked, setStudentLocked] = useState(false); // 최종 제출되어 잠긴 상태
+  const [teacherView, setTeacherView] = useState('detail'); // 'detail' | 'stats'
+  const [statsSort, setStatsSort] = useState('no'); // 'no' | 'total'
   const [loggingIn, setLoggingIn] = useState(false);
 
   // 구글 시트로 전송 (submitted: true=최종제출/잠금, false=임시저장)
@@ -420,6 +422,80 @@ const EvaluationApp = () => {
       alert('❌ 초기화 중 문제가 발생했습니다.');
       setLoadingData(false);
     }
+  };
+
+  // 학생별 통계 계산 (교사 통계표용)
+  const buildStats = () => {
+    const nameOf = no => {
+      const s = students.find(x => x.no === no);
+      return s ? `${s.no}.${s.name}` : String(no);
+    };
+    return students.map(s => {
+      const own = allData.find(d => d.student && d.student.no === s.no);
+      const roleVoters = allData.filter(d => d.roles && Array.isArray(d.roles.q5) && d.roles.q5.includes(s.no)).map(d => d.student);
+      const cleanVoters = allData.filter(d => d.cleaning && Array.isArray(d.cleaning.q5) && d.cleaning.q5.includes(s.no)).map(d => d.student);
+      const goodPraise = allData.filter(d => d.praise && (d.praise[s.no] !== undefined || d.praise[String(s.no)] !== undefined)).map(d => ({
+        from: d.student,
+        reason: d.praise[s.no] !== undefined ? d.praise[s.no] : d.praise[String(s.no)]
+      }));
+      const roleRecv = roleVoters.length;
+      const cleanRecv = cleanVoters.length;
+      const goodRecv = goodPraise.length;
+      return {
+        no: s.no,
+        name: s.name,
+        submitted: own ? !!own.submitted : false,
+        hasData: !!own,
+        role: {
+          q2: own && own.roles ? own.roles.q2 || '' : '',
+          q3: own && own.roles ? own.roles.q3 || '' : '',
+          q4: own && own.roles ? own.roles.q4 || '' : '',
+          recv: roleRecv,
+          voters: roleVoters.map(v => nameOf(v.no))
+        },
+        cleaning: {
+          q2: own && own.cleaning ? own.cleaning.q2 || '' : '',
+          q3: own && own.cleaning ? own.cleaning.q3 || '' : '',
+          q4: own && own.cleaning ? own.cleaning.q4 || '' : '',
+          recv: cleanRecv,
+          voters: cleanVoters.map(v => nameOf(v.no))
+        },
+        good: {
+          recv: goodRecv,
+          items: goodPraise.map(p => ({
+            from: nameOf(p.from.no),
+            reason: p.reason || ''
+          }))
+        },
+        total: roleRecv + cleanRecv + goodRecv
+      };
+    });
+  };
+
+  // 통계표를 엑셀(CSV)로 다운로드
+  const downloadCSV = () => {
+    const rows = buildStats();
+    const cell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""').replace(/\r?\n/g, ' / ') + '"';
+    const header = ['번호', '이름', '제출상태', '역할_자기평가(잘한점)', '역할_자기평가(어려운점)', '역할_자기평가(조언)', '역할_칭찬받은개수', '역할_칭찬한사람', '청소_자기평가(잘한점)', '청소_자기평가(어려운점)', '청소_자기평가(조언)', '청소_칭찬받은개수', '청소_칭찬한사람', '선행_칭찬받은개수', '선행_칭찬한사람과내용', '총점(칭찬합계)'];
+    const lines = [header.map(cell).join(',')];
+    rows.forEach(r => {
+      const goodText = r.good.items.map(it => `${it.from}(${it.reason})`).join(' / ');
+      lines.push([r.no, r.name, r.submitted ? '최종제출' : r.hasData ? '작성중' : '미작성', r.role.q2, r.role.q3, r.role.q4, r.role.recv, r.role.voters.join(', '), r.cleaning.q2, r.cleaning.q3, r.cleaning.q4, r.cleaning.recv, r.cleaning.voters.join(', '), r.good.recv, goodText, r.total].map(cell).join(','));
+    });
+    const csv = '\uFEFF' + lines.join('\r\n'); // BOM: 엑셀 한글 깨짐 방지
+    const blob = new Blob([csv], {
+      type: 'text/csv;charset=utf-8;'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date();
+    const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    a.href = url;
+    a.download = `1반_평가통계_${ymd}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // 로그인 처리 (기존 작성 내용 불러오기 + 잠금 상태 확인)
@@ -724,6 +800,14 @@ const EvaluationApp = () => {
     }, /*#__PURE__*/React.createElement(LogOut, {
       size: 18
     }), " 나가기")))), /*#__PURE__*/React.createElement("div", {
+      className: "bg-white rounded-lg shadow-md p-3 mb-6 flex gap-2"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setTeacherView('detail'),
+      className: `flex-1 py-2 rounded-lg font-bold ${teacherView === 'detail' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`
+    }, "👤 학생별 상세"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setTeacherView('stats'),
+      className: `flex-1 py-2 rounded-lg font-bold ${teacherView === 'stats' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`
+    }, "📊 전체 통계표")), teacherView === 'detail' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
       className: "bg-white rounded-lg shadow-md p-4 mb-6"
     }, /*#__PURE__*/React.createElement("h3", {
       className: "font-bold text-gray-700 mb-3"
@@ -855,7 +939,65 @@ const EvaluationApp = () => {
       className: "text-sm text-gray-400"
     }, "아직 받은 칭찬이 없습니다.")))) : /*#__PURE__*/React.createElement("div", {
       className: "bg-white rounded-lg shadow-md p-8 text-center text-gray-500"
-    }, "위에서 학생을 선택하면 그 학생의 자기평가와 받은 칭찬을 볼 수 있습니다."));
+    }, "위에서 학생을 선택하면 그 학생의 자기평가와 받은 칭찬을 볼 수 있습니다.")), teacherView === 'stats' && /*#__PURE__*/React.createElement("div", {
+      className: "bg-white rounded-lg shadow-md p-4 mb-6 overflow-x-auto"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex justify-between items-center mb-4 flex-wrap gap-2"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex gap-2"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setStatsSort('no'),
+      className: `px-3 py-2 rounded-lg text-sm font-bold ${statsSort === 'no' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`
+    }, "번호순"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setStatsSort('total'),
+      className: `px-3 py-2 rounded-lg text-sm font-bold ${statsSort === 'total' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`
+    }, "총점순")), /*#__PURE__*/React.createElement("button", {
+      onClick: downloadCSV,
+      className: "bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
+    }, "📥 엑셀(CSV) 다운로드")), /*#__PURE__*/React.createElement("table", {
+      className: "w-full text-sm border-collapse min-w-[560px]"
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+      className: "bg-gray-100 text-gray-700"
+    }, /*#__PURE__*/React.createElement("th", {
+      className: "px-2 py-2 border-b-2 border-gray-200 text-center"
+    }, "번호"), /*#__PURE__*/React.createElement("th", {
+      className: "px-2 py-2 border-b-2 border-gray-200 text-left"
+    }, "이름"), /*#__PURE__*/React.createElement("th", {
+      className: "px-2 py-2 border-b-2 border-gray-200 text-center"
+    }, "상태"), /*#__PURE__*/React.createElement("th", {
+      className: "px-2 py-2 border-b-2 border-gray-200 text-center"
+    }, "역할", /*#__PURE__*/React.createElement("br", null), "칭찬"), /*#__PURE__*/React.createElement("th", {
+      className: "px-2 py-2 border-b-2 border-gray-200 text-center"
+    }, "청소", /*#__PURE__*/React.createElement("br", null), "칭찬"), /*#__PURE__*/React.createElement("th", {
+      className: "px-2 py-2 border-b-2 border-gray-200 text-center"
+    }, "선행", /*#__PURE__*/React.createElement("br", null), "칭찬"), /*#__PURE__*/React.createElement("th", {
+      className: "px-2 py-2 border-b-2 border-gray-200 text-center bg-indigo-50"
+    }, "총점"))), /*#__PURE__*/React.createElement("tbody", null, [...buildStats()].sort((a, b) => statsSort === 'total' ? b.total - a.total : a.no - b.no).map(r => /*#__PURE__*/React.createElement("tr", {
+      key: r.no,
+      onClick: () => {
+        setSelectedStudentNo(r.no);
+        setTeacherView('detail');
+      },
+      className: "cursor-pointer hover:bg-indigo-50 border-b border-gray-100"
+    }, /*#__PURE__*/React.createElement("td", {
+      className: "px-2 py-2 text-center text-gray-500"
+    }, r.no), /*#__PURE__*/React.createElement("td", {
+      className: "px-2 py-2 font-bold text-gray-800"
+    }, r.name), /*#__PURE__*/React.createElement("td", {
+      className: "px-2 py-2 text-center text-xs"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: r.submitted ? 'text-green-700' : r.hasData ? 'text-yellow-700' : 'text-gray-400'
+    }, r.submitted ? '최종' : r.hasData ? '작성중' : '-')), /*#__PURE__*/React.createElement("td", {
+      className: "px-2 py-2 text-center"
+    }, r.role.recv), /*#__PURE__*/React.createElement("td", {
+      className: "px-2 py-2 text-center"
+    }, r.cleaning.recv), /*#__PURE__*/React.createElement("td", {
+      className: "px-2 py-2 text-center"
+    }, r.good.recv), /*#__PURE__*/React.createElement("td", {
+      className: "px-2 py-2 text-center font-bold text-indigo-700 bg-indigo-50"
+    }, r.total))))), /*#__PURE__*/React.createElement("p", {
+      className: "text-xs text-gray-500 mt-3 leading-relaxed"
+    }, "· 행을 클릭하면 그 학생의 ", /*#__PURE__*/React.createElement("strong", null, "상세 보기"), "로 이동합니다.", /*#__PURE__*/React.createElement("br", null), "· ", /*#__PURE__*/React.createElement("strong", null, "자기평가 본문"), "과 ", /*#__PURE__*/React.createElement("strong", null, "칭찬한 사람·내용 전체"), "는 ", /*#__PURE__*/React.createElement("strong", null, "엑셀(CSV) 다운로드"), " 파일에 모두 들어 있습니다.", /*#__PURE__*/React.createElement("br", null), "· 총점 = 역할 칭찬 + 청소 칭찬 + 선행 칭찬 받은 개수의 합계입니다.")));
   }
 
   // 평가 페이지
